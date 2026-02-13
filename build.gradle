@@ -1,0 +1,38 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'maven-publish'
+}
+
+group = 'locolang'
+version = (findProperty('version') ?: 'SNAPSHOT').toString()
+
+application {
+    mainClass = 'analyze.ExpressionAnalyzer'
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src', 'src/main/java']
+        }
+        resources {
+            srcDirs = ['resource', 'src/main/resources']
+        }
+    }
+}
+
+jar {
+    archiveBaseName = 'locolang'
+    manifest {
+        attributes('Main-Class': 'analyze.ExpressionAnalyzer')
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+}
