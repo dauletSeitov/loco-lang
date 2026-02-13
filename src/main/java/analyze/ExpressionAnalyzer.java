@@ -4,9 +4,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
+import java.net.URI;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,16 +27,6 @@ public class ExpressionAnalyzer {
         }
     }
 
-    private static final class ModuleSource {
-        final String code;
-        final String name;
-
-        ModuleSource(String code, String name) {
-            this.code = code;
-            this.name = name;
-        }
-    }
-
     public static void main(String[] args) throws IOException {
         Path llRoot = args.length > 0 ? Path.of(args[0]) : Path.of(".");
         ExecutionResult result = execute(llRoot, null, llRoot.resolve("main.ll").toString());
@@ -44,6 +37,37 @@ public class ExpressionAnalyzer {
             System.err.print(result.stderr);
         }
     }
+
+    public static Library getDefaultLibraries() {
+        URL stdUrl = ExpressionAnalyzer.class.getResource("/std");
+        if (stdUrl == null) {
+            return new Library(List.of());
+        }
+        if (!"file".equals(stdUrl.getProtocol())) {
+            throw new RuntimeException("Unsupported resource protocol for /std: " + stdUrl.getProtocol());
+        }
+        List<Library.LibraryFile> files = new ArrayList<>();
+        try {
+            URI uri = stdUrl.toURI();
+            Path stdPath = Path.of(uri);
+            try (var stream = Files.list(stdPath)) {
+
+                stream.forEach(p -> {
+                    String content = null;
+                    try {
+                        content = Files.readString(p);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                    files.add(new Library.LibraryFile("std/" + p.getFileName(), content));
+                });
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load default libraries from /std", e);
+        }
+        return new Library(List.copyOf(files));
+    }
+
 
     public static ExecutionResult execute(Path llRoot, String programSource, String sourceLabel) {
         String label = sourceLabel;
@@ -81,6 +105,16 @@ public class ExpressionAnalyzer {
         String stdout = outBuf.toString(StandardCharsets.UTF_8);
         String stderr = errBuf.toString(StandardCharsets.UTF_8);
         return new ExecutionResult(stdout, stderr, error);
+    }
+
+    private static final class ModuleSource {
+        final String code;
+        final String name;
+
+        ModuleSource(String code, String name) {
+            this.code = code;
+            this.name = name;
+        }
     }
 
     private static void runProgram(Path llRoot, String programSource) throws IOException {
@@ -136,7 +170,7 @@ public class ExpressionAnalyzer {
             }
         }
         if ("std".equals(module)) {
-            try (InputStream in = ExpressionAnalyzer.class.getResourceAsStream("/std.ll")) {
+            try (InputStream in = ExpressionAnalyzer.class.getResourceAsStream("/std/std.ll")) {
                 if (in != null) {
                     return new ModuleSource(new String(in.readAllBytes(), StandardCharsets.UTF_8), "jar:/std.ll");
                 }
