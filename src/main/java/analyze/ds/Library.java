@@ -1,11 +1,11 @@
-package analyze;
+package analyze.ds;
 
 import java.util.List;
 
 public record Library(
         List<LibraryFile> libraries
 ) {
-    record LibraryFile(
+    public record LibraryFile(
             String fileName,
             String content
     ) {
