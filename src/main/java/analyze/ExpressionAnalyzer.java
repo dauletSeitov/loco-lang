@@ -6,6 +6,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
+import java.net.JarURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -15,6 +16,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 public class ExpressionAnalyzer {
     public static final class ExecutionResult {
@@ -45,24 +48,42 @@ public class ExpressionAnalyzer {
         if (stdUrl == null) {
             return new Library(List.of());
         }
-        if (!"file".equals(stdUrl.getProtocol())) {
-            throw new RuntimeException("Unsupported resource protocol for /std: " + stdUrl.getProtocol());
-        }
         List<Library.LibraryFile> files = new ArrayList<>();
         try {
-            URI uri = stdUrl.toURI();
-            Path stdPath = Path.of(uri);
-            try (var stream = Files.list(stdPath)) {
-
-                stream.forEach(p -> {
-                    String content = null;
-                    try {
-                        content = Files.readString(p);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                    files.add(new Library.LibraryFile("std/" + p.getFileName(), content));
-                });
+            String protocol = stdUrl.getProtocol();
+            if ("file".equals(protocol)) {
+                URI uri = stdUrl.toURI();
+                Path stdPath = Path.of(uri);
+                try (var stream = Files.list(stdPath)) {
+                    stream.forEach(p -> {
+                        String content;
+                        try {
+                            content = Files.readString(p);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                        files.add(new Library.LibraryFile(p.getFileName().toString(), content));
+                    });
+                }
+            } else if ("jar".equals(protocol)) {
+                JarURLConnection conn = (JarURLConnection) stdUrl.openConnection();
+                String root = conn.getEntryName();
+                String rootNormalized = root == null ? "" : root.endsWith("/") ? root.substring(0, root.length() - 1) : root;
+                try (JarFile jar = conn.getJarFile()) {
+                    jar.stream()
+                            .filter(entry -> isStdLibraryEntry(entry, rootNormalized))
+                            .forEach(entry -> {
+                                String relName = entry.getName().substring(rootNormalized.length() + 1);
+                                try (InputStream in = jar.getInputStream(entry)) {
+                                    String content = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                                    files.add(new Library.LibraryFile(relName, content));
+                                } catch (IOException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            });
+                }
+            } else {
+                throw new RuntimeException("Unsupported resource protocol for /std: " + protocol);
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to load default libraries from /std", e);
@@ -70,6 +91,16 @@ public class ExpressionAnalyzer {
         return new Library(List.copyOf(files));
     }
 
+    private static boolean isStdLibraryEntry(JarEntry entry, String root) {
+        if (entry.isDirectory()) {
+            return false;
+        }
+        if (root == null || root.isEmpty()) {
+            return false;
+        }
+        String name = entry.getName();
+        return name.startsWith(root + "/") && name.length() > root.length() + 1;
+    }
 
     public static ExecutionResult execute(Path llRoot, String programSource, String sourceLabel) {
         String label = sourceLabel;
