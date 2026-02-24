@@ -9,6 +9,9 @@ public class Parser {
     Lexer lex;
     Token cur;
     java.util.List<ImportRef> imports = new java.util.ArrayList<>();
+    // When true, '>' (and other comparison ops) terminate the current expr.
+    // This avoids consuming dict literal close tokens as comparison operators.
+    boolean stopAtComparison = false;
 
     Parser(Lexer l) {
         lex = l;
@@ -76,8 +79,8 @@ public class Parser {
 
     Expr comparison() {
         Expr e = add();
-        while (cur.type == TokenType.GT || cur.type == TokenType.GE
-                || cur.type == TokenType.LT || cur.type == TokenType.LE) {
+        while (!stopAtComparison && (cur.type == TokenType.GT || cur.type == TokenType.GE
+                || cur.type == TokenType.LT || cur.type == TokenType.LE)) {
             Token opTok = cur;
             TokenType op = cur.type;
             eat(op);
@@ -179,13 +182,13 @@ public class Parser {
                         eat(TokenType.STRING);
                         eat(TokenType.COLON);
                         keys.add(new DictKey(key, true));
-                        values.add(expr());
+                        values.add(exprInDictValue());
                     } else if (cur.type == TokenType.IDENT) {
                         String key = cur.text;
                         eat(TokenType.IDENT);
                         eat(TokenType.COLON);
                         keys.add(new DictKey(key, false));
-                        values.add(expr());
+                        values.add(exprInDictValue());
                     } else {
                         throw new ScriptRuntimeException("Expected dictionary key", cur.line, cur.col, java.util.List.of());
                     }
@@ -222,12 +225,23 @@ public class Parser {
 
         if (cur.type == TokenType.LPAREN) {
             eat(TokenType.LPAREN);
+            boolean prevStop = stopAtComparison;
+            stopAtComparison = false;
             Expr e = expr();
+            stopAtComparison = prevStop;
             eat(TokenType.RPAREN);
             return postfix(e);
         }
 
         throw new ScriptRuntimeException("Bad factor", cur.line, cur.col, java.util.List.of());
+    }
+
+    Expr exprInDictValue() {
+        boolean prevStop = stopAtComparison;
+        stopAtComparison = true;
+        Expr e = assign();
+        stopAtComparison = prevStop;
+        return e;
     }
 
     Expr postfix(Expr e) {
@@ -399,6 +413,93 @@ public class Parser {
             funcs.put(name, new Function(params, block()));
         }
         return funcs;
+    }
+
+    ScriptResult parseScript() {
+        Map<String, Function> funcs = new HashMap<>();
+
+        while (cur.type != TokenType.EOF) {
+            if (cur.type == TokenType.IMPORT) {
+                eat(TokenType.IMPORT);
+                String module = cur.text;
+                eat(TokenType.IDENT);
+                if (cur.type != TokenType.DOT) {
+                    throw new ScriptRuntimeException("Expected '.' after module in import", cur.line, cur.col, java.util.List.of());
+                }
+                eat(TokenType.DOT);
+                Token nameTok = cur;
+                String name = cur.text;
+                eat(TokenType.IDENT);
+                String alias = name;
+                if (cur.type == TokenType.AS) {
+                    eat(TokenType.AS);
+                    Token aliasTok = cur;
+                    alias = cur.text;
+                    eat(TokenType.IDENT);
+                    if (alias.equals(name)) {
+                        throw new ScriptRuntimeException("Alias must be different from original name", aliasTok.line, aliasTok.col, java.util.List.of());
+                    }
+                }
+                for (ImportRef ref : imports) {
+                    if (ref.name.equals(name) && module.equals(ref.module) && ref.alias.equals(alias)) {
+                        throw new ScriptRuntimeException("Import already defined: " + module + "." + name, nameTok.line, nameTok.col, java.util.List.of());
+                    }
+                }
+                imports.add(new ImportRef(module, name, alias, nameTok.line, nameTok.col));
+                continue;
+            }
+            if (cur.type != TokenType.FUN) {
+                break;
+            }
+            eat(TokenType.FUN);
+            Token nameTok = cur;
+            String name = cur.text;
+            eat(TokenType.IDENT);
+            if (funcs.containsKey(name)) {
+                throw new ScriptRuntimeException("Function already defined: " + name, nameTok.line, nameTok.col, java.util.List.of());
+            }
+            eat(TokenType.LPAREN);
+
+            List<String> params = new ArrayList<>();
+            if (cur.type != TokenType.RPAREN) {
+                params.add(cur.text);
+                eat(TokenType.IDENT);
+                while (cur.type == TokenType.COMMA) {
+                    eat(TokenType.COMMA);
+                    params.add(cur.text);
+                    eat(TokenType.IDENT);
+                }
+            }
+            eat(TokenType.RPAREN);
+            funcs.put(name, new Function(params, block()));
+        }
+
+        Expr tail = null;
+        if (cur.type != TokenType.EOF) {
+            tail = expr();
+            if (cur.type != TokenType.EOF) {
+                throw new ScriptRuntimeException("Expected end of script", cur.line, cur.col, java.util.List.of());
+            }
+        }
+        return new ScriptResult(funcs, tail);
+    }
+
+    Expr parseExpression() {
+        Expr e = expr();
+        if (cur.type != TokenType.EOF) {
+            throw new ScriptRuntimeException("Expected end of expression", cur.line, cur.col, java.util.List.of());
+        }
+        return e;
+    }
+
+    static class ScriptResult {
+        final Map<String, Function> funcs;
+        final Expr tail;
+
+        ScriptResult(Map<String, Function> funcs, Expr tail) {
+            this.funcs = funcs;
+            this.tail = tail;
+        }
     }
 
     java.util.List<ImportRef> getImports() {

@@ -41,16 +41,38 @@ public class Lexer {
             return new Token(TokenType.NUMBER, input.substring(start, pos), startLine, startCol);
         }
 
-        if (c == '"') {
+        if (c == '"' || c == '\'') {
+            char quote = c;
             advance();
-            int start = pos;
-            while (pos < input.length() && input.charAt(pos) != '"')
+            StringBuilder sb = new StringBuilder();
+            while (pos < input.length()) {
+                char ch = input.charAt(pos);
+                if (ch == quote) {
+                    advance();
+                    return new Token(TokenType.STRING, sb.toString(), startLine, startCol);
+                }
+                if (ch == '\\') {
+                    advance();
+                    if (pos >= input.length()) {
+                        throw new ScriptRuntimeException("Unterminated string literal", startLine, startCol, java.util.List.of());
+                    }
+                    char esc = input.charAt(pos);
+                    switch (esc) {
+                        case '\\' -> sb.append('\\');
+                        case '"' -> sb.append('"');
+                        case '\'' -> sb.append('\'');
+                        case 'n' -> sb.append('\n');
+                        case 'r' -> sb.append('\r');
+                        case 't' -> sb.append('\t');
+                        default -> sb.append(esc);
+                    }
+                    advance();
+                    continue;
+                }
+                sb.append(ch);
                 advance();
-            if (pos >= input.length())
-                throw new ScriptRuntimeException("Unterminated string literal", startLine, startCol, java.util.List.of());
-            String text = input.substring(start, pos);
-            advance();
-            return new Token(TokenType.STRING, text, startLine, startCol);
+            }
+            throw new ScriptRuntimeException("Unterminated string literal", startLine, startCol, java.util.List.of());
         }
 
         if (Character.isLetter(c)) {

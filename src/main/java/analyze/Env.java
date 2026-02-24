@@ -52,6 +52,26 @@ public class Env {
     }
 
     Object call(String name, List<Expr> args, int line, int col) {
+        if (name.equals("eval") ) {
+            if (args.size() != 1) {
+                throw new ScriptRuntimeException(name + "() expects 1 argument", line, col, stackSnapshot());
+            }
+            Object v = args.get(0).eval(this);
+            if (!(v instanceof String s)) {
+                throw new ScriptRuntimeException(name + "() expects a string", line, col, stackSnapshot());
+            }
+            Parser p = new Parser(new Lexer(s));
+            Parser.ScriptResult res = p.parseScript();
+            funcs.putAll(res.funcs);
+            if (res.tail != null) {
+                return res.tail.eval(this);
+            }
+            if (res.funcs.containsKey("main")) {
+                return call("main", java.util.List.of(), line, col);
+            }
+            return null;
+        }
+
         if (name.equals("println")) {
             if (args.isEmpty()) {
                 System.out.println();
