@@ -1,7 +1,5 @@
 package analyze;
 
-import analyze.ds.Library;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,7 +32,7 @@ public class ExpressionAnalyzer {
 
     public static void main(String[] args) throws IOException {
         Path llRoot = args.length > 0 ? Path.of(args[0]) : Path.of(".");
-        ExecutionResult result = execute(llRoot, null, llRoot.resolve("main.ll").toString());
+        ExecutionResult result = execute(loadSourcesFromRoot(llRoot));
         if (!result.stdout.isEmpty()) {
             System.out.print(result.stdout);
         }
@@ -102,12 +100,7 @@ public class ExpressionAnalyzer {
         return name.startsWith(root + "/") && name.length() > root.length() + 1;
     }
 
-    public static ExecutionResult execute(Path llRoot, String programSource, String sourceLabel) {
-        String label = sourceLabel;
-        if (label == null) {
-            label = llRoot != null ? llRoot.resolve("main.ll").toString() : "<inline>";
-        }
-
+    public static ExecutionResult execute(List<SourceFile> sources) {
         ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         PrintStream oldOut = System.out;
@@ -118,14 +111,14 @@ public class ExpressionAnalyzer {
             System.setOut(new PrintStream(outBuf, true, StandardCharsets.UTF_8));
             System.setErr(new PrintStream(errBuf, true, StandardCharsets.UTF_8));
 
-            if (llRoot == null && programSource == null) {
-                throw new IllegalArgumentException("Either llRoot or programSource must be provided.");
+            if (sources == null || sources.isEmpty()) {
+                throw new IllegalArgumentException("At least one source file must be provided.");
             }
 
-            runProgram(llRoot, programSource);
+            runProgram(sources);
         } catch (ScriptRuntimeException e) {
             error = e;
-            writeScriptError(errBuf, e, label);
+            writeScriptError(errBuf, e, findMainLabel(sources));
             e.printStackTrace(new PrintStream(errBuf, true, StandardCharsets.UTF_8));
         } catch (Exception e) {
             error = e;
@@ -140,20 +133,13 @@ public class ExpressionAnalyzer {
         return new ExecutionResult(stdout, stderr, error);
     }
 
-    private static final class ModuleSource {
-        final String code;
-        final String name;
-
-        ModuleSource(String code, String name) {
-            this.code = code;
-            this.name = name;
+    private static void runProgram(List<SourceFile> sources) throws IOException {
+        Map<String, SourceFile> sourceMap = toSourceMap(sources);
+        SourceFile mainSource = sourceMap.get("main.ll");
+        if (mainSource == null) {
+            throw new IllegalArgumentException("Missing main source file: main.ll");
         }
-    }
-
-    private static void runProgram(Path llRoot, String programSource) throws IOException {
-        String programSrc = programSource == null
-                ? Files.readString(llRoot.resolve("main.ll"))
-                : programSource;
+        String programSrc = mainSource.content();
         Parser p = new Parser(new Lexer(programSrc));
         Map<String, Function> funcs = p.parseProgram();
         Map<String, Map<String, Function>> modules = new HashMap<>();
@@ -163,11 +149,11 @@ public class ExpressionAnalyzer {
             Map<String, Function> moduleFuncs = modules.get(module);
             if (moduleFuncs == null) {
                 try {
-                    ModuleSource moduleSrc = readModuleSource(llRoot, module);
-                    Parser moduleParser = new Parser(new Lexer(moduleSrc.code));
+                    SourceFile moduleSrc = readModuleSource(sourceMap, module);
+                    Parser moduleParser = new Parser(new Lexer(moduleSrc.content()));
                     moduleFuncs = moduleParser.parseProgram();
                     modules.put(module, moduleFuncs);
-                    moduleLabels.put(module, moduleSrc.name);
+                    moduleLabels.put(module, moduleSrc.fileName());
                 } catch (IOException e) {
                     throw new ScriptRuntimeException("Module file not found: " + module, ref.line, ref.col, List.of());
                 }
@@ -191,21 +177,15 @@ public class ExpressionAnalyzer {
         env.call("main", List.of(), 1, 1);
     }
 
-    private static ModuleSource readModuleSource(Path llRoot, String module) throws IOException {
-        if (llRoot != null) {
-            Path filePath = llRoot.resolve(module + ".ll");
-            if (Files.exists(filePath)) {
-                return new ModuleSource(Files.readString(filePath), filePath.toString());
-            }
-            Path fallbackPath = Path.of("resource", module + ".ll");
-            if (Files.exists(fallbackPath)) {
-                return new ModuleSource(Files.readString(fallbackPath), fallbackPath.toString());
-            }
+    private static SourceFile readModuleSource(Map<String, SourceFile> sources, String module) throws IOException {
+        SourceFile fromSources = sources.get(module + ".ll");
+        if (fromSources != null) {
+            return fromSources;
         }
         if ("std".equals(module)) {
             try (InputStream in = ExpressionAnalyzer.class.getResourceAsStream("/std/std.ll")) {
                 if (in != null) {
-                    return new ModuleSource(new String(in.readAllBytes(), StandardCharsets.UTF_8), "jar:/std.ll");
+                    return new SourceFile("jar:/std.ll", new String(in.readAllBytes(), StandardCharsets.UTF_8));
                 }
             }
         }
@@ -221,5 +201,40 @@ public class ExpressionAnalyzer {
                 err.println("  at " + f.name + " (" + f.line + ":" + f.col + ")");
             }
         }
+    }
+
+    private static List<SourceFile> loadSourcesFromRoot(Path llRoot) throws IOException {
+        List<SourceFile> sources = new ArrayList<>();
+        try (var stream = Files.list(llRoot)) {
+            stream.filter(p -> p.getFileName().toString().endsWith(".ll"))
+                    .forEach(p -> {
+                        try {
+                            sources.add(new SourceFile(p.getFileName().toString(), Files.readString(p)));
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+        }
+        return sources;
+    }
+
+    private static Map<String, SourceFile> toSourceMap(List<SourceFile> sources) {
+        Map<String, SourceFile> sourceMap = new HashMap<>();
+        for (SourceFile source : sources) {
+            SourceFile existing = sourceMap.putIfAbsent(source.fileName(), source);
+            if (existing != null) {
+                throw new IllegalArgumentException("Duplicate source file: " + source.fileName());
+            }
+        }
+        return sourceMap;
+    }
+
+    private static String findMainLabel(List<SourceFile> sources) {
+        for (SourceFile source : sources) {
+            if ("main.ll".equals(source.fileName())) {
+                return source.fileName();
+            }
+        }
+        return sources.isEmpty() ? "<unknown>" : sources.get(0).fileName();
     }
 }

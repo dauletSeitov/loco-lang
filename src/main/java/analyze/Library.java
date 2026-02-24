@@ -1,4 +1,4 @@
-package analyze.ds;
+package analyze;
 
 import java.util.List;
 
