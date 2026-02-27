@@ -70,3 +70,7 @@ Console mode (default):
 ```bash
 java -jar locolang-<version>.jar /path/to/ll
 ```
+
+## Dev Notes
+
+- Placeholder change for connectivity test.
