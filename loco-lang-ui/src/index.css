@@ -1,0 +1,130 @@
+@import "tailwindcss";
+@import "@fortawesome/fontawesome-free/css/all.min.css";
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600&display=swap");
+
+:root {
+  color-scheme: dark;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  --bg-base: #0b0d10;
+  --bg-mid: #0f1115;
+  --bg-top: #1c2230;
+  --app-bg: radial-gradient(
+    circle at top,
+    var(--bg-top) 0%,
+    var(--bg-mid) 55%,
+    var(--bg-base) 100%
+  );
+  --panel-bg-rgb: 11 16 19;
+  --panel-bg: rgb(var(--panel-bg-rgb));
+  --panel-bg-muted-rgb: 14 19 22;
+  --panel-bg-muted: rgb(var(--panel-bg-muted-rgb));
+  --panel-bg-muted-90: rgb(var(--panel-bg-muted-rgb) / 0.9);
+  --panel-bg-strong-rgb: 18 24 28;
+  --panel-bg-strong: rgb(var(--panel-bg-strong-rgb));
+  --panel-bg-alt-rgb: 15 21 25;
+  --panel-bg-alt: rgb(var(--panel-bg-alt-rgb));
+  --console-bg-rgb: 10 15 18;
+  --console-bg: rgb(var(--console-bg-rgb));
+  --text-primary: #e2e8f0;
+  --text-strong: #f1f5f9;
+  --text-muted: #cbd5e1;
+  --text-subtle: #64748b;
+  --transparent: transparent;
+  --emerald-50-rgb: 236 253 245;
+  --emerald-100-rgb: 209 250 229;
+  --emerald-200-rgb: 167 243 208;
+  --emerald-300-rgb: 110 231 183;
+  --emerald-400-rgb: 52 211 153;
+  --emerald-500-rgb: 16 185 129;
+  --emerald-50-90: rgb(var(--emerald-50-rgb) / 0.9);
+  --emerald-100: rgb(var(--emerald-100-rgb));
+  --emerald-200: rgb(var(--emerald-200-rgb));
+  --emerald-200-70: rgb(var(--emerald-200-rgb) / 0.7);
+  --emerald-200-80: rgb(var(--emerald-200-rgb) / 0.8);
+  --emerald-200-90: rgb(var(--emerald-200-rgb) / 0.9);
+  --emerald-300: rgb(var(--emerald-300-rgb));
+  --emerald-300-60: rgb(var(--emerald-300-rgb) / 0.6);
+  --emerald-300-70: rgb(var(--emerald-300-rgb) / 0.7);
+  --emerald-400: rgb(var(--emerald-400-rgb));
+  --emerald-500-10: rgb(var(--emerald-500-rgb) / 0.1);
+  --emerald-500-20: rgb(var(--emerald-500-rgb) / 0.2);
+  --emerald-500-60: rgb(var(--emerald-500-rgb) / 0.6);
+  --glow-strong: rgba(39, 227, 137, 0.35);
+  --glow-dot: rgba(52, 211, 153, 0.6);
+  --glow-inset: rgba(16, 185, 129, 0.08);
+  --syntax-keyword: #6ee7b7;
+  --syntax-string: #fcd34d;
+  --syntax-comment: rgba(148, 163, 184, 0.7);
+  --syntax-number: #93c5fd;
+  --syntax-type: #c4b5fd;
+  --syntax-builtin: #5eead4;
+  --syntax-function: #f9a8d4;
+  background-color: var(--bg-base);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+}
+
+code,
+pre,
+.font-mono {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    "Courier New", monospace;
+}
+
+.app-shell {
+  background: var(--app-bg);
+  color: var(--text-primary);
+  height: 100%;
+  overflow: hidden;
+}
+
+.ll-editor {
+  position: relative;
+}
+
+.ll-highlight {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  overflow: auto;
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ll-highlight .token-keyword {
+  color: var(--syntax-keyword);
+}
+
+.ll-highlight .token-string {
+  color: var(--syntax-string);
+}
+
+.ll-highlight .token-comment {
+  color: var(--syntax-comment);
+}
+
+.ll-highlight .token-number {
+  color: var(--syntax-number);
+}
+
+.ll-highlight .token-type {
+  color: var(--syntax-type);
+}
+
+.ll-highlight .token-builtin {
+  color: var(--syntax-builtin);
+}
+
+.ll-highlight .token-function {
+  color: var(--syntax-function);
+}
